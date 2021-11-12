@@ -66,11 +66,11 @@ func newTestStorage(t *testing.T) *testStorage {
 }
 
 func (t testStorage) cleanup() {
-	for _, path := range t.StoragePaths {
-		if err := os.RemoveAll(path.Path); err != nil {
-			fmt.Println("Cleanup error:", err)
-		}
-	}
+	// for _, path := range t.StoragePaths {
+	// 	if err := os.RemoveAll(path.Path); err != nil {
+	// 		fmt.Println("Cleanup error:", err)
+	// 	}
+	// }
 }
 
 func (t testStorage) GetStorage() (stores.StorageConfig, error) {
@@ -236,8 +236,10 @@ func TestSnapDeals(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, abi.PaddedPieceSize(1024), p2.Size)
 
-	pieces := []abi.PieceInfo{p1, p2}
+	time.Sleep(10 * time.Second)
 
+	pieces := []abi.PieceInfo{p1, p2}
+	fmt.Printf("RU\n")
 	out, err := m.ReplicaUpdate(ctx, sid, pieces)
 	_ = out
 	require.NoError(t, err)

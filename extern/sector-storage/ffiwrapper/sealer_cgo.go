@@ -21,6 +21,7 @@ import (
 	"github.com/filecoin-project/go-state-types/abi"
 	"github.com/filecoin-project/specs-storage/storage"
 
+	"github.com/detailyang/go-fallocate"
 	commpffi "github.com/filecoin-project/go-commp-utils/ffiwrapper"
 	"github.com/filecoin-project/go-commp-utils/zerocomm"
 	"github.com/filecoin-project/lotus/extern/sector-storage/fr32"
@@ -583,9 +584,48 @@ func (sb *Sealer) SealCommit2(ctx context.Context, sector storage.SectorRef, pha
 }
 
 func (sb *Sealer) ReplicaUpdate(ctx context.Context, sector storage.SectorRef, pieces []abi.PieceInfo) (storage.ReplicaUpdateProof, error) {
-	panic("implemente me")
-	// XXX once we have an ffi call put it in here
-	//return nil, nil
+	//	fileTypes := storiface.FTUpdate|storiface.FTCache|storiface.FTSealed|storiface.FTUnsealed
+	paths, done, err := sb.sectors.AcquireSector(ctx, sector, storiface.FTSealed|storiface.FTUnsealed|storiface.FTCache, storiface.FTUpdate, storiface.PathSealing)
+	if err != nil {
+		return nil, xerrors.Errorf("failed to acquire sector paths: %w", err)
+	}
+	defer done()
+
+	updateProofType := abi.SealProofInfos[sector.ProofType].UpdateProof
+
+	// XXX we need an update cache file too
+	// XXX we need to get data into paths.Unsealed, will this be a problem?
+	s, err := os.Stat(paths.Sealed)
+	if err != nil {
+		return nil, err
+	}
+	sealedSize := s.Size()
+
+	e, err := os.OpenFile(paths.Update, os.O_RDWR|os.O_CREATE, 0644) // nolint:gosec
+	if err != nil {
+		return nil, xerrors.Errorf("ensuring sealed file exists: %w", err)
+	}
+	fallocate.Fallocate(e, 0, sealedSize)
+	if err := e.Close(); err != nil {
+		return nil, err
+	}
+
+	if err := os.Truncate(paths.Unsealed, sealedSize); err != nil {
+		return nil, xerrors.Errorf("failed to truncate unsealed data file: %w", err)
+	}
+
+	sealed, unsealed, err := ffi.SectorUpdate.EncodeInto(updateProofType, paths.Update, paths.Cache, paths.Sealed, paths.Cache, paths.Unsealed, pieces)
+	if err != nil {
+		return nil, xerrors.Errorf("failed to update replica %d with new deal data: %w", sector.ID.Number, err)
+	}
+
+	// XXX we need an update cache file too
+	// XXX We need the old commr (sector key)
+	proof, err := ffi.SectorUpdate.GenerateUpdateProof(updateProofType, cid.Undef, sealed, unsealed, paths.Update, paths.Cache, paths.Sealed, paths.Cache)
+	if err != nil {
+		return nil, xerrors.Errorf("failed to generate proof of replica update for sector %d: %w", sector.ID.Number, err)
+	}
+	return proof, nil
 }
 
 func (sb *Sealer) ReleaseSealed(ctx context.Context, sector storage.SectorRef) error {

@@ -127,6 +127,7 @@ type localWorkerPathProvider struct {
 func (l *localWorkerPathProvider) AcquireSector(ctx context.Context, sector storage.SectorRef, existing storiface.SectorFileType, allocate storiface.SectorFileType, sealing storiface.PathType) (storiface.SectorPaths, func(), error) {
 	paths, storageIDs, err := l.w.storage.AcquireSector(ctx, sector, existing, allocate, sealing, l.op)
 	if err != nil {
+		fmt.Printf("local worker path provider failure\n")
 		return storiface.SectorPaths{}, nil, err
 	}
 
